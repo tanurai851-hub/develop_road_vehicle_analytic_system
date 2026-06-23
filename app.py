@@ -266,4 +266,4 @@ def api_stats():
     return jsonify(sim_data)
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, threaded=True, debug=False)
+    app.run(host="0.0.0.0", port=10000, threaded=True, debug=False)
