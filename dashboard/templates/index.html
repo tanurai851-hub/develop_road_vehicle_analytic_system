@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Road Vehicle Analytics — Command</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+  <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+  <style>
+    :root {
+      --bg: #0a0f1a;
+      --panel: #111a2b;
+      --panel-2: #16213a;
+      --line: #223150;
+      --ink: #e8eef9;
+      --muted: #7e8eaa;
+      --green: #1fbf75;
+      --amber: #f5a623;
+      --red: #ef4655;
+      --blue: #3b82f6;
+      --violet: #8b7cf6;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--bg); color: var(--ink);
+      font-family: "Inter", system-ui, sans-serif;
+    }
+    header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 28px; border-bottom: 1px solid var(--line);
+      background: linear-gradient(180deg, #0d1424, #0a0f1a);
+    }
+    .brand { display: flex; align-items: baseline; gap: 14px; }
+    .brand h1 {
+      font-family: "Space Grotesk", sans-serif; font-weight: 700;
+      font-size: 20px; letter-spacing: -0.01em; margin: 0;
+    }
+    .brand .tag {
+      font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase;
+      color: var(--muted);
+    }
+    /* Signature element: a live signal strip echoing a traffic light. */
+    .signal {
+      display: flex; align-items: center; gap: 10px;
+      font-family: "JetBrains Mono", monospace; font-size: 13px;
+    }
+    .lamp { width: 12px; height: 12px; border-radius: 50%; background: #2a3550; opacity: 0.3; }
+    .lamp.on { opacity: 1; box-shadow: 0 0 14px currentColor; }
+    .lamp.g { color: var(--green); background: var(--green); }
+    .lamp.a { color: var(--amber); background: var(--amber); }
+    .lamp.r { color: var(--red); background: var(--red); }
+    .signal .state { min-width: 64px; font-weight: 600; }
+
+    main { padding: 24px 28px; display: grid; gap: 22px; }
+    .kpis { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; }
+    .kpi {
+      background: var(--panel); border: 1px solid var(--line);
+      border-radius: 14px; padding: 18px 20px;
+    }
+    .kpi .label {
+      font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
+      color: var(--muted); margin-bottom: 8px;
+    }
+    .kpi .value {
+      font-family: "Space Grotesk", sans-serif; font-weight: 700;
+      font-size: 30px; line-height: 1; font-variant-numeric: tabular-nums;
+    }
+    .kpi .unit { font-size: 13px; color: var(--muted); margin-left: 4px; font-weight: 500; }
+    .kpi.alert .value { color: var(--red); }
+
+    .grid { display: grid; grid-template-columns: 1.35fr 1fr; gap: 22px; }
+    .panel {
+      background: var(--panel); border: 1px solid var(--line);
+      border-radius: 14px; overflow: hidden;
+    }
+    .panel h2 {
+      font-family: "Space Grotesk", sans-serif; font-size: 14px; font-weight: 600;
+      letter-spacing: 0.02em; margin: 0; padding: 14px 18px;
+      border-bottom: 1px solid var(--line); color: var(--ink);
+    }
+    .feed-wrap { background: #000; aspect-ratio: 16 / 9; }
+    .feed-wrap img { width: 100%; height: 100%; object-fit: contain; display: block; }
+    .charts { display: grid; gap: 22px; }
+    .chart { height: 240px; padding: 8px 10px 14px; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    thead th {
+      text-align: left; color: var(--muted); font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.08em; font-size: 11px;
+      padding: 10px 18px; border-bottom: 1px solid var(--line);
+    }
+    tbody td { padding: 11px 18px; border-bottom: 1px solid var(--panel-2); }
+    tbody tr:last-child td { border-bottom: 0; }
+    .speed-badge {
+      font-family: "JetBrains Mono", monospace; font-weight: 600;
+      color: var(--red); background: rgba(239,70,85,0.12);
+      padding: 2px 8px; border-radius: 6px;
+    }
+    .cat { font-family: "JetBrains Mono", monospace; color: var(--muted); }
+    .empty { padding: 26px 18px; color: var(--muted); font-size: 13px; }
+    @media (max-width: 1000px) {
+      .kpis { grid-template-columns: repeat(2, 1fr); }
+      .grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <h1>Road Vehicle Analytics</h1>
+      <span class="tag">Traffic Command</span>
+    </div>
+    <div class="signal" title="Live congestion state">
+      <span id="lamp-g" class="lamp g"></span>
+      <span id="lamp-a" class="lamp a"></span>
+      <span id="lamp-r" class="lamp r"></span>
+      <span class="state" id="signal-state">—</span>
+      <span style="color:var(--muted)">|</span>
+      <span id="fps">0.0 fps</span>
+    </div>
+  </header>
+
+  <main>
+    <section class="kpis">
+      <div class="kpi"><div class="label">Total Counted</div><div class="value" id="kpi-total">0</div></div>
+      <div class="kpi"><div class="label">Inbound</div><div class="value" id="kpi-up">0</div></div>
+      <div class="kpi"><div class="label">Outbound</div><div class="value" id="kpi-down">0</div></div>
+      <div class="kpi alert"><div class="label">Violations</div><div class="value" id="kpi-viol">0</div></div>
+      <div class="kpi"><div class="label">Plates Read</div><div class="value" id="kpi-plates">0</div></div>
+    </section>
+
+    <section class="grid">
+      <div class="panel">
+        <h2>Live Feed — annotated</h2>
+        <div class="feed-wrap"><img src="/video_feed" alt="Live annotated stream" /></div>
+      </div>
+      <div class="panel">
+        <h2>Analytics</h2>
+        <div class="charts">
+          <div class="chart" id="chart-category"></div>
+          <div class="chart" id="chart-hourly"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Speed Violations — limit {{ speed_limit }} km/h</h2>
+      <div id="violations-host">
+        <div class="empty">No violations logged yet.</div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const REFRESH_MS = {{ refresh_seconds }} * 1000;
+    const C = {
+      ink: "#e8eef9", muted: "#7e8eaa", line: "#223150",
+      green: "#1fbf75", amber: "#f5a623", red: "#ef4655", blue: "#3b82f6",
+    };
+    const catColors = { "LMV": C.green, "HMV": C.amber, "Two-Wheeler": C.blue };
+    const plotLayout = (extra) => Object.assign({
+      paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
+      font: { color: C.muted, family: "Inter, sans-serif", size: 11 },
+      margin: { l: 40, r: 12, t: 8, b: 30 },
+    }, extra || {});
+    const plotConfig = { displayModeBar: false, responsive: true };
+
+    async function getJSON(url) {
+      try { const r = await fetch(url); return await r.json(); }
+      catch (e) { return null; }
+    }
+
+    function setSignal(state) {
+      const map = { Low: "g", Medium: "a", High: "r" };
+      ["g", "a", "r"].forEach((k) =>
+        document.getElementById("lamp-" + k).classList.toggle("on", map[state] === k)
+      );
+      document.getElementById("signal-state").textContent = state || "—";
+    }
+
+    async function refreshStats() {
+      const s = await getJSON("/api/stats");
+      if (!s) return;
+      document.getElementById("kpi-total").textContent = s.total ?? 0;
+      document.getElementById("kpi-up").textContent = s.count_up ?? 0;
+      document.getElementById("kpi-down").textContent = s.count_down ?? 0;
+      document.getElementById("kpi-viol").textContent = s.total_violations ?? 0;
+      document.getElementById("kpi-plates").textContent = s.total_plates ?? 0;
+      document.getElementById("fps").textContent = (s.fps ?? 0).toFixed(1) + " fps";
+      setSignal(s.density_state);
+    }
+
+    async function refreshCategory() {
+      const data = await getJSON("/api/categories");
+      if (!data) return;
+      const labels = Object.keys(data);
+      const values = labels.map((k) => data[k]);
+      Plotly.react("chart-category", [{
+        type: "bar", x: values, y: labels, orientation: "h",
+        marker: { color: labels.map((l) => catColors[l] || C.blue) },
+        hovertemplate: "%{y}: %{x}<extra></extra>",
+      }], plotLayout({
+        title: { text: "Vehicles by category", font: { color: C.ink, size: 12 }, x: 0, xanchor: "left" },
+        xaxis: { gridcolor: C.line, zeroline: false },
+        yaxis: { automargin: true },
+      }), plotConfig);
+    }
+
+    async function refreshHourly() {
+      const rows = await getJSON("/api/hourly");
+      if (!rows) return;
+      Plotly.react("chart-hourly", [{
+        type: "scatter", mode: "lines", fill: "tozeroy",
+        x: rows.map((r) => r.hour), y: rows.map((r) => r.count),
+        line: { color: C.green, width: 2 }, fillcolor: "rgba(31,191,117,0.12)",
+        hovertemplate: "%{x}: %{y}<extra></extra>",
+      }], plotLayout({
+        title: { text: "Throughput — last 24h", font: { color: C.ink, size: 12 }, x: 0, xanchor: "left" },
+        xaxis: { gridcolor: C.line, zeroline: false },
+        yaxis: { gridcolor: C.line, zeroline: false },
+      }), plotConfig);
+    }
+
+    async function refreshViolations() {
+      const rows = await getJSON("/api/violations");
+      const host = document.getElementById("violations-host");
+      if (!rows || rows.length === 0) {
+        host.innerHTML = '<div class="empty">No violations logged yet.</div>';
+        return;
+      }
+      const body = rows.map((r) => `
+        <tr>
+          <td>#${r.violation_id}</td>
+          <td><span class="cat">${r.category ?? "—"}</span></td>
+          <td><span class="speed-badge">${r.logged_speed} km/h</span></td>
+          <td class="cat">limit ${r.speed_limit ?? "—"}</td>
+          <td class="cat">${r.violated_time}</td>
+        </tr>`).join("");
+      host.innerHTML = `
+        <table>
+          <thead><tr><th>ID</th><th>Category</th><th>Speed</th><th>Limit</th><th>Time</th></tr></thead>
+          <tbody>${body}</tbody>
+        </table>`;
+    }
+
+    function refreshAll() {
+      refreshStats(); refreshCategory(); refreshHourly(); refreshViolations();
+    }
+    refreshAll();
+    setInterval(refreshAll, REFRESH_MS);
+  </script>
+</body>
+</html>
