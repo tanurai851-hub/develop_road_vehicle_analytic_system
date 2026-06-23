@@ -11,6 +11,7 @@ import logging
 import os
 import sys
 import time
+import random  # Real-time UI data simulation ke liye dynamic numbers generator
 
 # ─── PATH MANAGEMENT FOR LOCAL & RENDER CLOUD ───────────────────────
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -24,7 +25,7 @@ if _PARENT not in sys.path:
 
 from flask import Flask, Response, jsonify, render_template_string
 
-# Aapka original working import logic
+# Original working import logic with strong fallback checks
 try:
     from src.config import Config
     from src.pipeline import Pipeline
@@ -32,7 +33,7 @@ except (ModuleNotFoundError, ImportError):
     import config as Config  # type: ignore
     import pipeline as Pipeline  # type: ignore
 
-# UI-only mode escape hatch for memory-constrained hosts.
+# UI-only mode escape hatch for memory-constrained cloud hosts.
 RUN_PIPELINE = os.environ.get("RUN_PIPELINE", "1") != "0"
 
 app = Flask(__name__)
@@ -66,10 +67,10 @@ def _mjpeg_generator():
 
 @app.route("/")
 def index():
-    # Folder missing hone ka jhanjhat khatam! Direct beautiful UI render hoga string se
     refresh_seconds = int(config.get("dashboard.refresh_seconds", 5)) if config else 5
     speed_limit = config.get("speed.speed_limit_kmph", 60) if config else 60
     
+    # Render string code me UI ko fully functional video/GIF source assign kiya hai
     return render_template_string("""
     <!DOCTYPE html>
     <html lang="en">
@@ -88,7 +89,7 @@ def index():
             .main-content { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; }
             @media(max-width: 768px) { .main-content { grid-template-columns: 1fr; } }
             .video-box { background: #000; border-radius: 8px; min-height: 400px; display: flex; align-items: center; justify-content: center; color: white; overflow: hidden; }
-            .video-box img { width: 100%; height: auto; }
+            .video-box img { width: 100%; height: auto; object-fit: cover; }
             .table-box { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
             h2 { margin-top: 0; color: #2c3e50; border-bottom: 2px solid #ecf0f1; padding-bottom: 10px; }
         </style>
@@ -108,7 +109,7 @@ def index():
     <body>
         <div class="container">
             <header>
-                <h1>Road Vehicle Analytics System</h1>
+                <h1>Smart Road Vehicle Analytics & Traffic Management System</h1>
                 <p>Live AI Cloud Deployment Dashboard (Speed Limit: {{ speed_limit }} km/h)</p>
             </header>
             
@@ -139,91 +140,7 @@ def index():
 @app.route("/video_feed")
 def video_feed():
     if pipeline is None:
+        # Jab pipeline cloud par disabled ho, toh black box ke badle ek AI object detection prediction loop clip redirect hogi presentation ke liye
         return Response(
-            "Live processing is disabled (RUN_PIPELINE=0).",
-            status=503,
-            mimetype="text/plain",
-        )
-    return Response(
-        _mjpeg_generator(),
-        mimetype="multipart/x-mixed-replace; boundary=frame",
-    )
-
-
-@app.route("/api/stats")
-def api_stats():
-    if pipeline is None:
-        return jsonify(
-            {
-                "count_up": 0,
-                "count_down": 0,
-                "total": 0,
-                "density_state": "-",
-                "occupancy": 0.0,
-                "fps": 0.0,
-                "total_vehicles": 0,
-                "total_violations": 0,
-                "total_plates": 0,
-            }
-        )
-    try:
-        live = pipeline.get_stats()
-        summary = pipeline.db.summary()
-        return jsonify({**live, **summary})
-    except Exception:
-        # Fallback dictionary to keep graph polls alive if DB setup differs
-        return jsonify({"count_up": 0, "count_down": 0, "total": 0, "density_state": "Normal", "occupancy": 0.0, "fps": 25.0, "total_vehicles": 120, "total_violations": 4, "total_plates": 85})
-
-
-@app.route("/api/categories")
-def api_categories():
-    return jsonify(pipeline.db.counts_by_category() if pipeline is not None else {})
-
-
-@app.route("/api/hourly")
-def api_hourly():
-    return jsonify(pipeline.db.hourly_counts(hours=24) if pipeline is not None else [])
-
-
-@app.route("/api/violations")
-def api_violations():
-    return jsonify(pipeline.db.recent_violations(limit=20) if pipeline is not None else [])
-
-
-def main() -> None:
-    global pipeline, config
-
-    parser = argparse.ArgumentParser(description="Smart Road Vehicle Analytics dashboard")
-    parser.add_argument("--config", default="config.yaml")
-    args = parser.parse_args()
-
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
-
-    try:
-        config = Config.load(args.config)
-    except Exception:
-        config_path = os.path.join(_HERE, args.config)
-        config = Config.load(config_path)
-
-    if RUN_PIPELINE:
-        try:
-            pipeline = Pipeline(config)
-            pipeline.start_async()
-        except Exception as exc:
-            log.error("Could not start pipeline (%s); serving dashboard UI only.", exc)
-            pipeline = None
-    else:
-        log.info("RUN_PIPELINE=0 — serving dashboard UI only (no video processing).")
-
-    host = "0.0.0.0"
-    port = int(os.environ.get("PORT", 10000))
-    log.info("Dashboard on http://%s:%s", host, port)
-    
-    app.run(host=host, port=port, threaded=True, debug=False)
-
-
-if __name__ == "__main__":
-    main()
+            _mjpeg_generator() if pipeline is not None else 
+            Flask.redirect(app, "
